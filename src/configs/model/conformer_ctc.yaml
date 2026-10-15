@@ -1,0 +1,9 @@
+_target_: src.model.conformer.ConformerCTC
+n_feats: 128
+hidden_size: 128
+num_layers: 4
+num_heads: 4
+conv_channels: 32
+conv_kernel_size: 31
+ff_expansion: 4
+dropout: 0.1
