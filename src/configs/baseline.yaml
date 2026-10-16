@@ -1,11 +1,16 @@
 defaults:
-  - model: baseline
+  - model: conformer_ctc
   - writer: cometml
   - metrics: example
-  - datasets: onebatchtest
+  - datasets: example
   - dataloader: example
-  - transforms: inference
+  - transforms: baseline
   - _self_
+dataloader:
+  batch_size: 16
+  num_workers: 4
+writer:
+  project_name: hse-dla-asr
 optimizer:
   _target_: torch.optim.AdamW
   lr: 3e-4
@@ -18,16 +23,18 @@ lr_scheduler:
   anneal_strategy: cos
 loss_function:
   _target_: src.loss.CTCLossWrapper
+  zero_infinity: True
 text_encoder:
   _target_: src.text_encoder.CTCTextEncoder
 trainer:
   log_step: 50
-  n_epochs: 50
-  epoch_len: 200
+  n_epochs: 15
+  epoch_len: 3000
+  max_grad_norm: 1.0
   device_tensors: ["spectrogram", "text_encoded"] # which tensors should be on device (ex. GPU)
   resume_from: null # null or path to the checkpoint dir with *.pth and config.yaml
   device: auto # device name or "auto"
-  override: False # if True, will override the previous run with the same name
+  override: True # if True, will override the previous run with the same name
   monitor: "min val_WER_(Argmax)" # "off" or "max/min metric_name", i.e. our goal is to maximize/minimize metric
   save_period: 5 # checkpoint each save_period epochs in addition to the best epoch
   early_stop: ${trainer.n_epochs} # epochs for early stopping

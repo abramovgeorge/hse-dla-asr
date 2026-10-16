@@ -12,6 +12,7 @@ wandb
 comet_ml
 hydra-core
 wget
+librosa
 
 black
 isort

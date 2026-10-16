@@ -1,0 +1,61 @@
+train:
+  get_spectrogram: # special key for getting spectrogram
+    _target_: torchaudio.transforms.MelSpectrogram
+    sample_rate: 16000
+
+  audio:
+    _target_: torchvision.transforms.Compose
+    transforms:
+      - _target_: src.transforms.wav_augs.Gain
+        min_gain_in_db: -5.0
+        max_gain_in_db: 5.0
+        p: 0.5
+        output_type: tensor
+
+      - _target_: src.transforms.wav_augs.ColoredNoise
+        min_snr_in_db: 15.0
+        max_snr_in_db: 20.0
+        min_f_decay: 0.0
+        max_f_decay: 0.0
+        sample_rate: 16000
+        p: 0.5
+        output_type: tensor
+
+      - _target_: src.transforms.wav_augs.PitchShift
+        min_transpose_semitones: -2.0
+        max_transpose_semitones: 2.0
+        sample_rate: 16000
+        p: 0.3
+        output_type: tensor
+
+      - _target_: torchvision.transforms.RandomApply
+        p: 0.3
+        transforms:
+          - _target_: torchvision.transforms.RandomChoice
+            transforms:
+              - _target_: src.transforms.wav_augs.TimeStretch
+                rate: 0.9
+              - _target_: src.transforms.wav_augs.TimeStretch
+                rate: 1.1
+
+  spectrogram:
+    _target_: torchvision.transforms.Compose
+    transforms:
+      - _target_: src.transforms.log_mel.LogMel
+      - _target_: torchaudio.transforms.FrequencyMasking
+        freq_mask_param: 15
+      - _target_: torchaudio.transforms.TimeMasking
+        time_mask_param: 30
+        p: 0.1
+
+  spectrogram_raw:
+    _target_: src.transforms.log_mel.LogMel
+
+inference:
+  get_spectrogram:
+    _target_: torchaudio.transforms.MelSpectrogram
+    sample_rate: 16000
+  spectrogram:
+    _target_: src.transforms.log_mel.LogMel
+  spectrogram_raw:
+    _target_: src.transforms.log_mel.LogMel

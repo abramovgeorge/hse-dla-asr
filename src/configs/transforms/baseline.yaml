@@ -1,5 +1,5 @@
 defaults:
-  - instance_transforms: mel_only
+  - instance_transforms: baseline
   - _self_
 
 # these lines are required if you do not use batch transforms

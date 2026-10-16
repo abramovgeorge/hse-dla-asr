@@ -79,15 +79,31 @@ class Trainer(BaseTrainer):
         # logging scheme might be different for different partitions
         if mode == "train":  # the method is called only every self.log_step steps
             self.log_spectrogram(**batch)
+            self.log_audio(**batch)
         else:
             # Log Stuff
             self.log_spectrogram(**batch)
+            self.log_audio(**batch)
             self.log_predictions(**batch)
 
-    def log_spectrogram(self, spectrogram, **batch):
-        spectrogram_for_plot = spectrogram[0].detach().cpu()
+    def log_spectrogram(
+        self,
+        spectrogram,
+        spectrogram_length,
+        spectrogram_raw,
+        spectrogram_raw_length,
+        **batch
+    ):
+        spectrogram_for_plot = (
+            spectrogram[0, :, : int(spectrogram_length[0])].detach().cpu()
+        )
         image = plot_spectrogram(spectrogram_for_plot)
         self.writer.add_image("spectrogram", image)
+        spectrogram_raw_for_plot = (
+            spectrogram_raw[0, :, : int(spectrogram_raw_length[0])].detach().cpu()
+        )
+        image_raw = plot_spectrogram(spectrogram_raw_for_plot)
+        self.writer.add_image("spectrogram_raw", image_raw)
 
     def log_predictions(
         self, text, log_probs, log_probs_length, audio_path, examples_to_log=10, **batch
@@ -122,4 +138,16 @@ class Trainer(BaseTrainer):
             }
         self.writer.add_table(
             "predictions", pd.DataFrame.from_dict(rows, orient="index")
+        )
+
+    def log_audio(self, audio, audio_length, audio_raw, audio_raw_length, **batch):
+        self.writer.add_audio(
+            "audio",
+            audio[0, : int(audio_length[0])],
+            sample_rate=16000,
+        )
+        self.writer.add_audio(
+            "audio_raw",
+            audio_raw[0, : int(audio_raw_length[0])],
+            sample_rate=16000,
         )
