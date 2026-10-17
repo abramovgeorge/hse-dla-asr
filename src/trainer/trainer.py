@@ -108,10 +108,6 @@ class Trainer(BaseTrainer):
     def log_predictions(
         self, text, log_probs, log_probs_length, audio_path, examples_to_log=10, **batch
     ):
-        # TODO add beam search
-        # Note: by improving text encoder and metrics design
-        # this logging can also be improved significantly
-
         argmax_inds = log_probs.cpu().argmax(-1).numpy()
         argmax_inds = [
             inds[: int(ind_len)]
@@ -123,18 +119,32 @@ class Trainer(BaseTrainer):
         argmax_texts = [self.text_encoder.ctc_decode(inds) for inds in argmax_inds]
         tuples = list(zip(argmax_texts, text, argmax_texts_raw, audio_path))
 
+        beam_preds = []
+        for probs, length in zip(
+            log_probs[:examples_to_log],
+            log_probs_length[:examples_to_log],
+        ):
+            beams = self.text_encoder.ctc_beam_search(
+                probs[: int(length)],
+                beam_size=self.config.beam_size,
+            )
+            beam_preds.append(beams[0][0].strip())
+
         rows = {}
-        for pred, target, raw_pred, audio_path in tuples[:examples_to_log]:
+        for (pred, target, raw_pred, audio_path), beam_pred in zip(
+            tuples[:examples_to_log], beam_preds
+        ):
             target = self.text_encoder.normalize_text(target)
-            wer = calc_wer(target, pred) * 100
-            cer = calc_cer(target, pred) * 100
 
             rows[Path(audio_path).name] = {
                 "target": target,
                 "raw prediction": raw_pred,
-                "predictions": pred,
-                "wer": wer,
-                "cer": cer,
+                "prediction_argmax": pred,
+                "prediction_beam": beam_pred,
+                "wer_argmax": calc_wer(target, pred) * 100,
+                "cer_argmax": calc_cer(target, pred) * 100,
+                "wer_beam": calc_wer(target, beam_pred) * 100,
+                "cer_beam": calc_cer(target, beam_pred) * 100,
             }
         self.writer.add_table(
             "predictions", pd.DataFrame.from_dict(rows, orient="index")

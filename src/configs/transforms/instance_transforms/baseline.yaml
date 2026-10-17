@@ -16,17 +16,17 @@ train:
         min_snr_in_db: 15.0
         max_snr_in_db: 20.0
         min_f_decay: 0.0
-        max_f_decay: 0.0
+        max_f_decay: 2.0
         sample_rate: 16000
         p: 0.5
         output_type: tensor
 
-      - _target_: src.transforms.wav_augs.PitchShift
-        min_transpose_semitones: -2.0
-        max_transpose_semitones: 2.0
-        sample_rate: 16000
-        p: 0.3
-        output_type: tensor
+      # - _target_: src.transforms.wav_augs.PitchShift # slow
+      #   min_transpose_semitones: -2.0
+      #   max_transpose_semitones: 2.0
+      #   sample_rate: 16000
+      #   p: 0.3
+      #   output_type: tensor
 
       - _target_: torchvision.transforms.RandomApply
         p: 0.3

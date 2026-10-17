@@ -1,9 +1,10 @@
 import re
+from collections import defaultdict
 from string import ascii_lowercase
 
+import numpy as np
 import torch
 
-# TODO add BPE, LM, Beam Search support
 # Note: think about metrics and encoder
 # The design can be remarkably improved
 # to calculate stuff more efficiently and prettier
@@ -12,11 +13,13 @@ import torch
 class CTCTextEncoder:
     EMPTY_TOK = ""
 
-    def __init__(self, alphabet=None, **kwargs):
+    def __init__(self, alphabet=None, lm_model=None, lm_weight=0.1, **kwargs):
         """
         Args:
             alphabet (list): alphabet for language. If None, it will be
                 set to ascii
+            lm_model (HuggingFaceLM | None): LM for shallow fusion during beam search
+            lm_weight (float): weight for LM log probs during shallow fusion
         """
 
         if alphabet is None:
@@ -27,6 +30,9 @@ class CTCTextEncoder:
 
         self.ind2char = dict(enumerate(self.vocab))
         self.char2ind = {v: k for k, v in self.ind2char.items()}
+
+        self._lm_model = lm_model
+        self._lm_weight = lm_weight
 
     def __len__(self):
         return len(self.vocab)
@@ -73,6 +79,71 @@ class CTCTextEncoder:
                 no_reps.append(inds[i])
         no_blanks = [ind for ind in no_reps if ind != self.char2ind[self.EMPTY_TOK]]
         return "".join([self.ind2char[int(ind)] for ind in no_blanks]).strip()
+
+    def ctc_beam_search(self, log_probs, beam_size=10):
+        """
+        Decode the CTC output using beam search.
+        Args:
+            log_probs (Tensor): log probabilities of shape [T, vocab_size].
+            beam_size (int): number of beams to keep at each step.
+        Returns:
+            list: (text, log_probability) pairs sorted by probability.
+        """
+        log_probs = log_probs.detach().cpu().numpy()
+        empty_ind = self.char2ind[self.EMPTY_TOK]
+        beam = {"": [0.0, -np.inf]}
+
+        lm_scores = dict()
+
+        for log_prob_t in log_probs:
+            new_beam = defaultdict(lambda: [-np.inf, -np.inf])
+            for prefix, (log_p_b, log_p_nb) in beam.items():
+                for ind, log_p in enumerate(log_prob_t):
+                    if ind == empty_ind:
+                        new_beam[prefix][0] = np.logaddexp(
+                            new_beam[prefix][0],
+                            np.logaddexp(log_p_b, log_p_nb) + log_p,
+                        )
+                        continue
+
+                    char = self.ind2char[ind]
+                    if len(prefix) > 0 and prefix[-1] == char:
+                        new_beam[prefix][1] = np.logaddexp(
+                            new_beam[prefix][1], log_p_nb + log_p
+                        )
+                        new_beam[prefix + char][1] = np.logaddexp(
+                            new_beam[prefix + char][1], log_p_b + log_p
+                        )
+                    else:
+                        new_beam[prefix + char][1] = np.logaddexp(
+                            new_beam[prefix + char][1],
+                            np.logaddexp(log_p_b, log_p_nb) + log_p,
+                        )
+
+            if self._lm_model is not None:
+                prefixes = list(new_beam)
+                lm_scores = {
+                    prefix: self._lm_weight * score
+                    for prefix, score in zip(prefixes, self._lm_model.score(prefixes))
+                }
+
+            beam = dict(
+                sorted(
+                    new_beam.items(),
+                    key=lambda x: (
+                        np.logaddexp(x[1][0], x[1][1]) + lm_scores.get(x[0], 0.0)
+                    ),
+                    reverse=True,
+                )[:beam_size]
+            )
+
+        return sorted(
+            [
+                (prefix, np.logaddexp(p[0], p[1]) + lm_scores.get(prefix, 0.0))
+                for prefix, p in beam.items()
+            ],
+            key=lambda x: -x[1],
+        )[:beam_size]
 
     @staticmethod
     def normalize_text(text: str):

@@ -86,6 +86,11 @@ class Inferencer(BaseTrainer):
             # init model
             self._from_pretrained(config.inferencer.get("from_pretrained"))
 
+        self._decoding = self.cfg_trainer.get("decoding", "argmax")
+        self._beam_size = self.config.get("beam_size", 10)
+
+        assert self._decoding in ("argmax", "beam_search"), "Decoding not supported"
+
     def run_inference(self):
         """
         Run inference on each partition.
@@ -143,8 +148,15 @@ class Inferencer(BaseTrainer):
             # https://github.com/pytorch/pytorch/issues/1995
             log_probs = batch["log_probs"][i].clone()
             log_probs_length = batch["log_probs_length"][i].clone()
-            ids = log_probs.argmax(dim=-1)[:log_probs_length]
-            text = self.text_encoder.ctc_decode(ids)
+            if self._decoding == "beam_search":
+                beams = self.text_encoder.ctc_beam_search(
+                    log_probs[: int(log_probs_length)],
+                    beam_size=self._beam_size,
+                )
+                text = beams[0][0].strip()
+            else:
+                ids = log_probs.argmax(dim=-1)[:log_probs_length]
+                text = self.text_encoder.ctc_decode(ids)
 
             if self.save_path is not None:
                 filename = Path(batch["audio_path"][i]).stem + ".txt"

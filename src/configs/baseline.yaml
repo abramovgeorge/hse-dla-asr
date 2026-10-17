@@ -26,6 +26,13 @@ loss_function:
   zero_infinity: True
 text_encoder:
   _target_: src.text_encoder.CTCTextEncoder
+  lm_weight: 0.1
+  lm_model:
+    _target_: src.text_encoder.lm_model.HuggingFaceLM
+    model_name: EleutherAI/pythia-31m
+    device: ${trainer.device}
+    batch_size: 64
+beam_size: 10
 trainer:
   log_step: 50
   n_epochs: 15
