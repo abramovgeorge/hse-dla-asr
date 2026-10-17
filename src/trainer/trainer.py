@@ -57,6 +57,17 @@ class Trainer(BaseTrainer):
         for loss_name in self.config.writer.loss_names:
             metrics.update(loss_name, batch[loss_name].item())
 
+        if not self.is_train:
+            predictions = batch["log_probs"].detach().cpu()
+            lengths = batch["log_probs_length"].detach().cpu().numpy()
+            batch["beam_preds"] = [
+                self.text_encoder.ctc_beam_search(
+                    probs[:length],
+                    beam_size=self.config.beam_size,
+                )[0][0].strip()
+                for probs, length in zip(predictions, lengths)
+            ]
+
         for met in metric_funcs:
             metrics.update(met.name, met(**batch))
         return batch
@@ -106,7 +117,14 @@ class Trainer(BaseTrainer):
         self.writer.add_image("spectrogram_raw", image_raw)
 
     def log_predictions(
-        self, text, log_probs, log_probs_length, audio_path, examples_to_log=10, **batch
+        self,
+        text,
+        log_probs,
+        log_probs_length,
+        audio_path,
+        beam_preds,
+        examples_to_log=10,
+        **batch
     ):
         argmax_inds = log_probs.cpu().argmax(-1).numpy()
         argmax_inds = [
@@ -118,17 +136,6 @@ class Trainer(BaseTrainer):
         argmax_texts_raw = [self.text_encoder.decode(inds) for inds in argmax_inds]
         argmax_texts = [self.text_encoder.ctc_decode(inds) for inds in argmax_inds]
         tuples = list(zip(argmax_texts, text, argmax_texts_raw, audio_path))
-
-        beam_preds = []
-        for probs, length in zip(
-            log_probs[:examples_to_log],
-            log_probs_length[:examples_to_log],
-        ):
-            beams = self.text_encoder.ctc_beam_search(
-                probs[: int(length)],
-                beam_size=self.config.beam_size,
-            )
-            beam_preds.append(beams[0][0].strip())
 
         rows = {}
         for (pred, target, raw_pred, audio_path), beam_pred in zip(

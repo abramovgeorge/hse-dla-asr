@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 from tqdm.auto import tqdm
 
+from src.metrics import BeamSearchCERMetric, BeamSearchWERMetric
 from src.metrics.tracker import MetricTracker
 from src.trainer.base_trainer import BaseTrainer
 
@@ -134,6 +135,22 @@ class Inferencer(BaseTrainer):
         outputs = self.model(**batch)
         batch.update(outputs)
 
+        metric_funcs = self.metrics["inference"] if metrics is not None else []
+
+        if self._decoding == "beam_search" or any(
+            isinstance(met, (BeamSearchCERMetric, BeamSearchWERMetric))
+            for met in metric_funcs
+        ):
+            predictions = batch["log_probs"].detach().cpu()
+            lengths = batch["log_probs_length"].detach().cpu().numpy()
+            batch["beam_preds"] = [
+                self.text_encoder.ctc_beam_search(
+                    probs[:length],
+                    beam_size=self.config.beam_size,
+                )[0][0].strip()
+                for probs, length in zip(predictions, lengths)
+            ]
+
         if metrics is not None:
             for met in self.metrics["inference"]:
                 metrics.update(met.name, met(**batch))
@@ -149,11 +166,7 @@ class Inferencer(BaseTrainer):
             log_probs = batch["log_probs"][i].clone()
             log_probs_length = batch["log_probs_length"][i].clone()
             if self._decoding == "beam_search":
-                beams = self.text_encoder.ctc_beam_search(
-                    log_probs[: int(log_probs_length)],
-                    beam_size=self._beam_size,
-                )
-                text = beams[0][0].strip()
+                text = batch["beam_preds"][i]
             else:
                 ids = log_probs.argmax(dim=-1)[:log_probs_length]
                 text = self.text_encoder.ctc_decode(ids)
