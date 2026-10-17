@@ -21,6 +21,13 @@ train:
         p: 0.5
         output_type: tensor
 
+      - _target_: src.transforms.wav_augs.BackgroundNoise
+        sounds_path: data/datasets/librispeech/train-clean-100
+        min_snr_db: 15.0
+        max_snr_db: 20.0
+        sample_rate: 16000
+        p: 0.3
+
       # - _target_: src.transforms.wav_augs.PitchShift # slow
       #   min_transpose_semitones: -2.0
       #   max_transpose_semitones: 2.0

@@ -93,8 +93,6 @@ class CTCTextEncoder:
         empty_ind = self.char2ind[self.EMPTY_TOK]
         beam = {"": [0.0, -np.inf]}
 
-        lm_scores = dict()
-
         for log_prob_t in log_probs:
             new_beam = defaultdict(lambda: [-np.inf, -np.inf])
             for prefix, (log_p_b, log_p_nb) in beam.items():
@@ -120,28 +118,25 @@ class CTCTextEncoder:
                             np.logaddexp(log_p_b, log_p_nb) + log_p,
                         )
 
-            if self._lm_model is not None:
-                prefixes = list(new_beam)
-                lm_scores = {
-                    prefix: self._lm_weight * score
-                    for prefix, score in zip(prefixes, self._lm_model.score(prefixes))
-                }
-
             beam = dict(
                 sorted(
                     new_beam.items(),
-                    key=lambda x: (
-                        np.logaddexp(x[1][0], x[1][1]) + lm_scores.get(x[0], 0.0)
-                    ),
-                    reverse=True,
+                    key=lambda x: -(np.logaddexp(x[1][0], x[1][1])),
                 )[:beam_size]
             )
 
+        results = [(prefix, np.logaddexp(p[0], p[1])) for prefix, p in beam.items()]
+
+        if self._lm_model is not None:
+            lm_scores = self._lm_model.score([text for text, _ in results])
+
+            results = [
+                (text, old_score + self._lm_weight * lm_score)
+                for (text, old_score), lm_score in zip(results, lm_scores)
+            ]
+
         return sorted(
-            [
-                (prefix, np.logaddexp(p[0], p[1]) + lm_scores.get(prefix, 0.0))
-                for prefix, p in beam.items()
-            ],
+            results,
             key=lambda x: -x[1],
         )[:beam_size]
 

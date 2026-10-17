@@ -6,6 +6,7 @@ transformers==4.51.3
 soundfile
 numpy==1.26.4
 torch_audiomentations
+audiomentations==0.43.1
 tqdm
 matplotlib
 pandas
