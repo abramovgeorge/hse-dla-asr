@@ -7,11 +7,14 @@ defaults:
   - _self_
 text_encoder:
   _target_: src.text_encoder.CTCTextEncoder
+  tokenizer_path: data/tokenizers/bpe_256.json
+  tokenizer_text_dir: data/datasets/librispeech/train-clean-100
+  vocab_size: 256
   lm_weight: 0.1
   lm_model:
     _target_: src.text_encoder.lm_model.HuggingFaceLM
     model_name: EleutherAI/pythia-31m
-    device: ${trainer.device}
+    device: ${inferencer.device}
     batch_size: 64
 metrics:
   inference: []
