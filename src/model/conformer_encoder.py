@@ -185,7 +185,7 @@ class ConformerEncoder(nn.Module):
             hidden_size % num_heads == 0
         ), "Hidden size should be divisible by the number of heads"
 
-        self._downsampler = nn.Sequential(
+        self.downsampler = nn.Sequential(
             nn.Conv2d(1, conv_channels, 3, 2, 1),
             nn.LeakyReLU(),
             nn.Conv2d(conv_channels, conv_channels, 3, 2, 1),
@@ -194,9 +194,9 @@ class ConformerEncoder(nn.Module):
 
         for _ in range(2):
             n_feats = (n_feats + 1) // 2
-        self._downsample_mlp = nn.Linear(conv_channels * n_feats, hidden_size)
+        self.downsample_mlp = nn.Linear(conv_channels * n_feats, hidden_size)
 
-        self._layers = nn.ModuleList(
+        self.layers = nn.ModuleList(
             [
                 ConformerLayer(
                     hidden_size, num_heads, ff_expansion, conv_kernel_size, dropout
@@ -205,7 +205,7 @@ class ConformerEncoder(nn.Module):
             ]
         )
 
-        self._pe = SinusoidalPositionalEncoding(max_len, hidden_size, dropout)
+        self.pe = SinusoidalPositionalEncoding(max_len, hidden_size, dropout)
 
     def forward(self, spectrogram, spectrogram_length, **batch):
         """
@@ -221,8 +221,8 @@ class ConformerEncoder(nn.Module):
         length = self._transform_input_lengths(spectrogram_length).to(x.device)
         positions = torch.arange(x.shape[1], device=x.device)
         padding_mask = positions.unsqueeze(0) >= length.unsqueeze(1)
-        x = self._pe(x)
-        for layer in self._layers:
+        x = self.pe(x)
+        for layer in self.layers:
             x = layer(x, padding_mask)
         return x, length
 
@@ -233,10 +233,10 @@ class ConformerEncoder(nn.Module):
         Returns:
             Tensor: downsampled spectrogram
         """
-        x = self._downsampler(spectrogram)  # (B, C, F', T')
+        x = self.downsampler(spectrogram)  # (B, C, F', T')
         x = x.permute(0, 3, 1, 2)  # (B, T', C, F')
         x = x.flatten(start_dim=2)  # (B, T', C x F')
-        x = self._downsample_mlp(x)  # (B, T', D)
+        x = self.downsample_mlp(x)  # (B, T', D)
         return x
 
     def _transform_input_lengths(self, input_lengths):
@@ -251,7 +251,7 @@ class ConformerEncoder(nn.Module):
         """
         lengths = input_lengths
 
-        for layer in self._downsampler:
+        for layer in self.downsampler:
             if isinstance(layer, nn.Conv2d):
                 k = layer.kernel_size[-1]
                 s = layer.stride[-1]

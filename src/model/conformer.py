@@ -34,7 +34,7 @@ class ConformerCTC(nn.Module):
         """
         super().__init__()
 
-        self._encoder = ConformerEncoder(
+        self.encoder = ConformerEncoder(
             n_feats,
             hidden_size,
             num_layers,
@@ -45,7 +45,7 @@ class ConformerCTC(nn.Module):
             dropout,
         )
 
-        self._head = nn.Linear(hidden_size, n_tokens)
+        self.head = nn.Linear(hidden_size, n_tokens)
 
     def forward(self, spectrogram, spectrogram_length, **batch):
         """
@@ -58,8 +58,8 @@ class ConformerCTC(nn.Module):
             output (dict): output dict containing log_probs and
                 transformed lengths.
         """
-        x, log_probs_length = self._encoder(spectrogram, spectrogram_length)
-        x = self._head(x)
+        x, log_probs_length = self.encoder(spectrogram, spectrogram_length)
+        x = self.head(x)
         log_probs = nn.functional.log_softmax(x, dim=-1)
         return {"log_probs": log_probs, "log_probs_length": log_probs_length}
 
