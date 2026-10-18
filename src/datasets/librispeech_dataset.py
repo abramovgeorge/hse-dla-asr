@@ -75,7 +75,7 @@ class LibrispeechDataset(BaseDataset):
             if any([f.endswith(".flac") for f in filenames]):
                 flac_dirs.add(dirpath)
         for flac_dir in tqdm(
-            list(flac_dirs), desc=f"Preparing librispeech folders: {part}"
+            sorted(flac_dirs), desc=f"Preparing librispeech folders: {part}"
         ):
             flac_dir = Path(flac_dir)
             trans_path = list(flac_dir.glob("*.trans.txt"))[0]

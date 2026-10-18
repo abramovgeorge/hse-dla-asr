@@ -8,6 +8,7 @@ class BackgroundNoise(nn.Module):
         super().__init__()
         self._sample_rate = sample_rate
         self._aug = AddBackgroundNoise(*args, **kwargs)
+        self._aug.sound_file_paths.sort()
 
     def __call__(self, data: Tensor):
         x = data.detach().cpu().squeeze(0).numpy()

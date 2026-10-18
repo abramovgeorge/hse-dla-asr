@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from collections import defaultdict
@@ -239,6 +240,13 @@ class CTCTextEncoder:
             vocab_size=vocab_size,
             special_tokens=["[UNK]"],
         )
+
+        config = json.loads(tokenizer.to_str())
+        tokens = ["[UNK]"] + sorted(
+            token for token in config["model"]["vocab"] if token != "[UNK]"
+        )
+        config["model"]["vocab"] = {token: index for index, token in enumerate(tokens)}
+        tokenizer = Tokenizer.from_str(json.dumps(config))
 
         tokenizer_path.parent.mkdir(parents=True, exist_ok=True)
         tokenizer.save(str(tokenizer_path))
