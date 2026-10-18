@@ -10,6 +10,7 @@ text_encoder:
   tokenizer_path: data/tokenizers/bpe_256.json
   tokenizer_text_dir: data/datasets/librispeech/train-clean-100
   vocab_size: 256
+  beam_search_njobs: 4
   lm_weight: 0.1
   lm_model:
     _target_: src.text_encoder.lm_model.HuggingFaceLM

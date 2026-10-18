@@ -6,6 +6,7 @@ from string import ascii_lowercase
 
 import numpy as np
 import torch
+from joblib import Parallel, delayed
 from tokenizers import CharBPETokenizer, Tokenizer
 
 # Note: think about metrics and encoder
@@ -24,6 +25,7 @@ class CTCTextEncoder:
         vocab_size=256,
         lm_model=None,
         lm_weight=0.1,
+        beam_search_njobs=1,
         **kwargs,
     ):
         """
@@ -37,6 +39,7 @@ class CTCTextEncoder:
             vocab_size (int): vocab size for tokenizer.
             lm_model (HuggingFaceLM | None): LM for fusion during beam search
             lm_weight (float): weight for LM log probs during fusion
+            beam_search_njobs (int): number of jobs for parallel beam search
         """
 
         if alphabet is None:
@@ -60,6 +63,8 @@ class CTCTextEncoder:
 
         self._lm_model = lm_model
         self._lm_weight = lm_weight
+
+        self._beam_search_njobs = beam_search_njobs
 
     def __len__(self):
         return len(self.vocab)
@@ -126,8 +131,47 @@ class CTCTextEncoder:
         Returns:
             list: (text, log_probability) pairs sorted by probability.
         """
+        return self.ctc_beam_search_batched(
+            log_probs.unsqueeze(0), torch.tensor([log_probs.shape[0]]), beam_size
+        )[0]
+
+    def ctc_beam_search_batched(self, log_probs, log_probs_length, beam_size=10):
+        # log_probs: (B, T, V)
         log_probs = log_probs.detach().cpu().numpy()
-        empty_ind = self.char2ind[self.EMPTY_TOK]
+        log_probs_length = log_probs_length.detach().cpu().numpy()
+        beam_jobs = Parallel(n_jobs=self._beam_search_njobs, backend="loky")(
+            delayed(CTCTextEncoder._ctc_beam_dp)(
+                probs[:length], beam_size, self.char2ind[self.EMPTY_TOK]
+            )
+            for probs, length in zip(log_probs, log_probs_length)
+        )
+        results = [
+            [(self.decode(prefix), score) for prefix, score in beams]
+            for beams in beam_jobs
+        ]
+        if self._lm_model is not None:
+            lm_scores = iter(
+                self._lm_model.score([text for beams in results for text, _ in beams])
+            )
+
+            results = [
+                [
+                    (text, old_score + self._lm_weight * next(lm_scores))
+                    for text, old_score in beams
+                ]
+                for beams in results
+            ]
+
+        return [
+            sorted(
+                beams,
+                key=lambda x: -x[1],
+            )[:beam_size]
+            for beams in results
+        ]
+
+    @staticmethod
+    def _ctc_beam_dp(log_probs, beam_size, empty_ind):
         beam = {(): [0.0, -np.inf]}
 
         for log_prob_t in log_probs:
@@ -162,23 +206,7 @@ class CTCTextEncoder:
                 )[:beam_size]
             )
 
-        results = [
-            (self.decode(prefix), np.logaddexp(p[0], p[1]))
-            for prefix, p in beam.items()
-        ]
-
-        if self._lm_model is not None:
-            lm_scores = self._lm_model.score([text for text, _ in results])
-
-            results = [
-                (text, old_score + self._lm_weight * lm_score)
-                for (text, old_score), lm_score in zip(results, lm_scores)
-            ]
-
-        return sorted(
-            results,
-            key=lambda x: -x[1],
-        )[:beam_size]
+        return [(prefix, np.logaddexp(p[0], p[1])) for prefix, p in beam.items()]
 
     @staticmethod
     def normalize_text(text: str):

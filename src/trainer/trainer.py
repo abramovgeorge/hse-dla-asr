@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.logger.utils import plot_spectrogram
+from src.metrics import BeamSearchCERMetric, BeamSearchWERMetric
 from src.metrics.tracker import MetricTracker
 from src.metrics.utils import calc_cer, calc_wer
 from src.trainer.base_trainer import BaseTrainer
@@ -57,16 +58,16 @@ class Trainer(BaseTrainer):
         for loss_name in self.config.writer.loss_names:
             metrics.update(loss_name, batch[loss_name].item())
 
-        if not self.is_train:
-            predictions = batch["log_probs"].detach().cpu()
-            lengths = batch["log_probs_length"].detach().cpu().numpy()
-            batch["beam_preds"] = [
-                self.text_encoder.ctc_beam_search(
-                    probs[:length],
-                    beam_size=self.config.beam_size,
-                )[0][0].strip()
-                for probs, length in zip(predictions, lengths)
-            ]
+        if not self.is_train and any(
+            isinstance(met, (BeamSearchCERMetric, BeamSearchWERMetric))
+            for met in metric_funcs
+        ):
+            beams = self.text_encoder.ctc_beam_search_batched(
+                batch["log_probs"],
+                batch["log_probs_length"],
+                beam_size=self.config.beam_size,
+            )
+            batch["beam_preds"] = [beam_pred[0][0].strip() for beam_pred in beams]
 
         for met in metric_funcs:
             metrics.update(met.name, met(**batch))
@@ -122,7 +123,7 @@ class Trainer(BaseTrainer):
         log_probs,
         log_probs_length,
         audio_path,
-        beam_preds,
+        beam_preds=None,
         examples_to_log=10,
         **batch
     ):
@@ -138,8 +139,8 @@ class Trainer(BaseTrainer):
         tuples = list(zip(argmax_texts, text, argmax_texts_raw, audio_path))
 
         rows = {}
-        for (pred, target, raw_pred, audio_path), beam_pred in zip(
-            tuples[:examples_to_log], beam_preds
+        for i, (pred, target, raw_pred, audio_path) in enumerate(
+            tuples[:examples_to_log]
         ):
             target = self.text_encoder.normalize_text(target)
 
@@ -147,12 +148,20 @@ class Trainer(BaseTrainer):
                 "target": target,
                 "raw prediction": raw_pred,
                 "prediction_argmax": pred,
-                "prediction_beam": beam_pred,
                 "wer_argmax": calc_wer(target, pred) * 100,
                 "cer_argmax": calc_cer(target, pred) * 100,
-                "wer_beam": calc_wer(target, beam_pred) * 100,
-                "cer_beam": calc_cer(target, beam_pred) * 100,
             }
+
+            if beam_preds is not None:
+                beam_pred = beam_preds[i]
+                rows[Path(audio_path).name].update(
+                    {
+                        "prediction_beam": beam_pred,
+                        "wer_beam": calc_wer(target, beam_pred) * 100,
+                        "cer_beam": calc_cer(target, beam_pred) * 100,
+                    }
+                )
+
         self.writer.add_table(
             "predictions", pd.DataFrame.from_dict(rows, orient="index")
         )

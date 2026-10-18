@@ -141,15 +141,12 @@ class Inferencer(BaseTrainer):
             isinstance(met, (BeamSearchCERMetric, BeamSearchWERMetric))
             for met in metric_funcs
         ):
-            predictions = batch["log_probs"].detach().cpu()
-            lengths = batch["log_probs_length"].detach().cpu().numpy()
-            batch["beam_preds"] = [
-                self.text_encoder.ctc_beam_search(
-                    probs[:length],
-                    beam_size=self.config.beam_size,
-                )[0][0].strip()
-                for probs, length in zip(predictions, lengths)
-            ]
+            beams = self.text_encoder.ctc_beam_search_batched(
+                batch["log_probs"],
+                batch["log_probs_length"],
+                beam_size=self.config.beam_size,
+            )
+            batch["beam_preds"] = [beam_pred[0][0].strip() for beam_pred in beams]
 
         if metrics is not None:
             for met in self.metrics["inference"]:

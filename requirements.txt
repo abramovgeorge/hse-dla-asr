@@ -15,6 +15,7 @@ comet_ml
 hydra-core
 wget
 librosa
+joblib==1.6.0
 
 black
 isort

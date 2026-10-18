@@ -23,7 +23,7 @@ class HuggingFaceLM:
 
     @torch.inference_mode()
     def score(self, texts):
-        log_probs = []
+        log_probs = list()
 
         for start in range(0, len(texts), self._batch_size):
             batch = texts[start : start + self._batch_size]
