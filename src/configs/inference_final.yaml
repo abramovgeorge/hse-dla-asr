@@ -1,0 +1,55 @@
+defaults:
+  - model: conformer_ctc
+  - datasets: custom_dir
+  - dataloader: example
+  - transforms: inference
+  - _self_
+
+resources_dir: asr_model
+dataset_root: ???
+
+model:
+  n_feats: 128
+  hidden_size: 256
+  num_layers: 12
+  num_heads: 4
+  conv_channels: 32
+  conv_kernel_size: 31
+  ff_expansion: 4
+  dropout: 0.1
+
+datasets:
+  test:
+    audio_dir: ${dataset_root}/audio
+    transcription_dir: null
+
+dataloader:
+  batch_size: 1
+  num_workers: 0
+  pin_memory: true
+
+text_encoder:
+  _target_: src.text_encoder.CTCTextEncoder
+  tokenizer_path: ${resources_dir}/bpe_128.json
+  tokenizer_text_dir: null
+  vocab_size: 128
+  beam_search_njobs: 2
+  lm_weight: 0.1
+  lm_model:
+    _target_: src.text_encoder.lm_model.HuggingFaceLM
+    model_name: EleutherAI/pythia-410m
+    device: ${inferencer.device}
+    batch_size: 32
+
+metrics:
+  inference: []
+
+beam_size: 10
+
+inferencer:
+  device_tensors: ["spectrogram", "text_encoded"]
+  device: auto
+  seed: 1
+  from_pretrained: ${resources_dir}/model_best.pth
+  save_path: predictions
+  decoding: beam_search

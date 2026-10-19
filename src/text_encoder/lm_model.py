@@ -14,7 +14,7 @@ class HuggingFaceLM:
 
         self._tokenizer.pad_token = self._tokenizer.eos_token
 
-        dtype = torch.float16 if self._device.type == "cuda" else torch.float32
+        dtype = torch.bfloat16 if self._device.type == "cuda" else torch.float32
         self._model = (
             AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=dtype)
             .to(self._device)
